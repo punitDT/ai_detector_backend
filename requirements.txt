@@ -3,3 +3,8 @@ uvicorn
 transformers
 torch
 nltk
+aiofiles
+python-multipart
+PyMuPDF
+python-docx
+protobuf

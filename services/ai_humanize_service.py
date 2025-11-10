@@ -1,19 +1,4 @@
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-import torch
-
-HUMANIZE_MODEL_NAME = "pszemraj/flan-t5-base-instruct-dolly_hhrlhf"
-
-print("🔄 Loading Text Humanizer model...")
-
-# Load model and tokenizer once globally
-tokenizer = AutoTokenizer.from_pretrained(HUMANIZE_MODEL_NAME)
-model = AutoModelForSeq2SeqLM.from_pretrained(HUMANIZE_MODEL_NAME)
-
-# Move to GPU if available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-
-print("✅ Humanizer model loaded successfully!")
+import main
 
 async def humanize_text_service(text: str):
     """
@@ -26,10 +11,10 @@ async def humanize_text_service(text: str):
 
     # Prepare input for model
     input_text = f"paraphrase: {text}"
-    inputs = tokenizer.encode(input_text, return_tensors="pt", max_length=512, truncation=True).to(device)
+    inputs = main.humanizeTokenizer.encode(input_text, return_tensors="pt", max_length=512, truncation=True).to(main.device)
 
     # Generate humanized output
-    outputs = model.generate(
+    outputs = main.humanizeModel.generate(
         inputs,
         max_length=256,
         num_beams=5,
@@ -37,7 +22,7 @@ async def humanize_text_service(text: str):
         temperature=1.5,
     )
 
-    humanized_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    humanized_text = main.humanizeTokenizer.decode(outputs[0], skip_special_tokens=True)
 
     return {
         "original_text": text,

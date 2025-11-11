@@ -18,6 +18,63 @@ def simple_sentence_tokenize(text: str) -> list[str]:
 
     return sentences
 
+def chunk_text(text: str, max_chars: int = 2000) -> list[str]:
+    """
+    Split text into chunks that fit within the model's token limit.
+    Uses sentence boundaries to avoid splitting mid-sentence.
+
+    Args:
+        text: The text to chunk
+        max_chars: Maximum characters per chunk (roughly 500 tokens)
+
+    Returns:
+        List of text chunks
+    """
+    # If text is short enough, return as-is
+    if len(text) <= max_chars:
+        return [text]
+
+    # Split into sentences first
+    sentences = simple_sentence_tokenize(text)
+
+    chunks = []
+    current_chunk = ""
+
+    for sentence in sentences:
+        # If a single sentence is too long, split it by words
+        if len(sentence) > max_chars:
+            # If we have accumulated text, save it first
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
+
+            # Split long sentence into word-based chunks
+            words = sentence.split()
+            temp_chunk = ""
+            for word in words:
+                if len(temp_chunk) + len(word) + 1 <= max_chars:
+                    temp_chunk += word + " "
+                else:
+                    if temp_chunk:
+                        chunks.append(temp_chunk.strip())
+                    temp_chunk = word + " "
+            if temp_chunk:
+                chunks.append(temp_chunk.strip())
+
+        # If adding this sentence would exceed limit, save current chunk
+        elif len(current_chunk) + len(sentence) + 1 > max_chars:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            current_chunk = sentence + " "
+        else:
+            current_chunk += sentence + " "
+
+    # Add the last chunk
+    if current_chunk:
+        chunks.append(current_chunk.strip())
+
+    return chunks
+
 async def detect_text_service(text: str, detector_client: "InferenceClient" = None, model: str = None):
     """
     Detect AI-generated text using HuggingFace Inference API
@@ -37,31 +94,62 @@ async def detect_text_service(text: str, detector_client: "InferenceClient" = No
     if not text:
         return {"error": "Empty text received"}
 
-    # Use HuggingFace Inference API for text classification
-    global_result = detector_client.text_classification(
-        text,
-        model=model,
-    )[0]
+    # Split text into chunks that fit within model's token limit
+    chunks = chunk_text(text, max_chars=2000)
 
-    overall_label = global_result["label"]
-    overall_score = round(float(global_result["score"]), 4)
+    # Analyze each chunk and collect scores
+    chunk_scores = []
+    chunk_labels = []
 
-    # Analyze each sentence
+    for chunk in chunks:
+        try:
+            result = detector_client.text_classification(
+                chunk,
+                model=model,
+            )[0]
+            chunk_scores.append(float(result["score"]))
+            chunk_labels.append(result["label"])
+        except Exception as e:
+            # If a chunk still fails, skip it
+            print(f"Warning: Failed to analyze chunk: {str(e)}")
+            continue
+
+    # Calculate overall score as weighted average by chunk length
+    if chunk_scores:
+        overall_score = sum(chunk_scores) / len(chunk_scores)
+        # Determine overall label based on majority vote
+        fake_count = sum(1 for label in chunk_labels if label == "Fake")
+        overall_label = "Fake" if fake_count > len(chunk_labels) / 2 else "Real"
+    else:
+        return {"error": "Failed to analyze text"}
+
+    overall_score = round(overall_score, 4)
+
+    # Analyze each sentence for detailed results
     sentences = simple_sentence_tokenize(text)
     detailed_results = []
 
     for sentence in sentences:
-        result = detector_client.text_classification(
-            sentence,
-            model=model,
-        )[0]
+        # Skip very short sentences
+        if len(sentence.strip()) < 10:
+            continue
 
-        detailed_results.append({
-            "sentence": sentence,
-            "label": result["label"],
-            "score": round(float(result["score"]), 4),
-            "ai_likelihood": "High" if result["score"] > 0.8 else "Medium" if result["score"] > 0.5 else "Low"
-        })
+        try:
+            result = detector_client.text_classification(
+                sentence,
+                model=model,
+            )[0]
+
+            detailed_results.append({
+                "sentence": sentence,
+                "label": result["label"],
+                "score": round(float(result["score"]), 4),
+                "ai_likelihood": "High" if result["score"] > 0.8 else "Medium" if result["score"] > 0.5 else "Low"
+            })
+        except Exception as e:
+            # If a sentence fails, skip it
+            print(f"Warning: Failed to analyze sentence: {str(e)}")
+            continue
 
     return {
         "overall": {
@@ -69,5 +157,6 @@ async def detect_text_service(text: str, detector_client: "InferenceClient" = No
             "score": overall_score,
             "ai_likelihood": "High" if overall_score > 0.8 else "Medium" if overall_score > 0.5 else "Low"
         },
-        "sentences": detailed_results
+        "sentences": detailed_results,
+        "chunks_analyzed": len(chunks)
     }

@@ -74,6 +74,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Health check / Test route
+@app.get("/", tags=["Health"])
+async def root():
+    """
+    Health check endpoint - returns API status and available endpoints
+    """
+    return {
+        "status": "healthy",
+        "message": "AI Text Detector API is running",
+        "version": "2.0",
+        "endpoints": {
+            "health": "/",
+            "docs": "/docs",
+            "detect_text": "/api/detect",
+            "upload_file": "/api/upload",
+            "humanize_text": "/api/humanize"
+        },
+        "models": {
+            "detector": DETECTOR_MODEL,
+            "humanizer": HUMANIZER_MODEL + " (placeholder)"
+        }
+    }
+
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """
+    Simple health check endpoint for monitoring
+    """
+    return {"status": "ok"}
+
 # Include route files
 app.include_router(detect_router, prefix="/api/detect", tags=["Detection"])
 app.include_router(upload_router, prefix="/api/upload", tags=["Upload"])

@@ -2,19 +2,32 @@ from nltk.tokenize import sent_tokenize
 import main
 
 async def detect_text_service(text: str):
+    """
+    Detect AI-generated text using HuggingFace Inference API
+    """
     text = text.strip()
     if not text:
         return {"error": "Empty text received"}
 
-    global_result = main.detector(text)[0]
+    # Use HuggingFace Inference API for text classification
+    global_result = main.detector_client.text_classification(
+        text,
+        model=main.DETECTOR_MODEL,
+    )[0]
+
     overall_label = global_result["label"]
     overall_score = round(float(global_result["score"]), 4)
 
+    # Analyze each sentence
     sentences = sent_tokenize(text)
     detailed_results = []
 
     for sentence in sentences:
-        result = main.detector(sentence)[0]
+        result = main.detector_client.text_classification(
+            sentence,
+            model=main.DETECTOR_MODEL,
+        )[0]
+
         detailed_results.append({
             "sentence": sentence,
             "label": result["label"],

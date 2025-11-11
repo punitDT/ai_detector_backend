@@ -1,12 +1,9 @@
 from fastapi import APIRouter, UploadFile, File
-from utils.file_utils import FileHandler
 from services.ai_detector_service import detect_text_service
-from services.document_service import DocumentService  # your class
-
+from services.document_service import DocumentService
 
 router = APIRouter()
-file_handler = FileHandler(upload_dir="uploads")
-doc_service = DocumentService(upload_dir="uploads")  # ✅ create instance here
+doc_service = DocumentService(upload_dir="uploads")
 
 @router.post("/")
 async def upload_file(file: UploadFile = File(...)):

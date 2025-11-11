@@ -1,46 +1,66 @@
+import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from routes.detect_routes import router as detect_router
 from routes.upload_routes import router as upload_router
 from routes.humanize_routes import router as humanize_router
 from fastapi.middleware.cors import CORSMiddleware
 import nltk
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForSeq2SeqLM, pipeline
-import torch
+from huggingface_hub import InferenceClient
+from dotenv import load_dotenv
 
-app = FastAPI(title="AI Text Detector API", version="2.0")
+# Load environment variables from .env file
+load_dotenv()
 
-# Preload model at startup
-@app.on_event("startup")
-def load_model():
-    # Ensure tokenizers are downloaded
+# Initialize HuggingFace Inference Client
+detector_client = None
+humanizer_client = None
+
+# Model names
+DETECTOR_MODEL = "openai-community/roberta-base-openai-detector"
+# Using google/flan-t5-base as it's widely available on Inference API
+# Note: This is a general-purpose T5 model, not specifically trained for paraphrasing
+# For better paraphrasing, consider using a local model or dedicated paraphrasing service
+HUMANIZER_MODEL = "google/flan-t5-base"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize HuggingFace Inference API clients on startup"""
+    global detector_client, humanizer_client
+
+    # Ensure tokenizers are downloaded for sentence splitting
     try:
         nltk.data.find('tokenizers/punkt')
     except LookupError:
         nltk.download("punkt", quiet=True)
 
-    MODEL_NAME = "openai-community/roberta-base-openai-detector"
-    HUMANIZE_MODEL_NAME = "rVamsi/T5_Paraphrase_Paws"
-    print("🔄 Loading AI detector model...")
+    # Get HuggingFace API token from environment
+    hf_token = os.environ.get("HF_TOKEN")
+    if not hf_token:
+        print("⚠️  Warning: HF_TOKEN not found in environment variables")
+        print("⚠️  Set HF_TOKEN to use HuggingFace Inference API")
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
-    detector = pipeline("text-classification", model=model, tokenizer=tokenizer, truncation=True)
+    print("🔄 Initializing AI detector client...")
+    detector_client = InferenceClient(
+        provider="hf-inference",
+        api_key=hf_token,
+    )
+    print("✅ AI detector client initialized!")
 
-    print("✅ Model loaded successfully!")
+    print("� Initializing text humanizer client...")
+    # Humanizer client is currently disabled - no suitable models on Inference API
+    # humanizer_client = InferenceClient(
+    #     provider="hf-inference",
+    #     api_key=hf_token,
+    # )
+    print("ℹ️  Text humanizer is using placeholder implementation")
 
-    HUMANIZE_MODEL_NAME = "pszemraj/flan-t5-base-instruct-dolly_hhrlhf"
+    yield
 
-    print("🔄 Loading Text Humanizer model...")
+    # Cleanup (if needed)
+    print("🔄 Shutting down...")
 
-    # Load model and tokenizer once globally
-    humanizeTokenizer = AutoTokenizer.from_pretrained(HUMANIZE_MODEL_NAME)
-    humanizeModel = AutoModelForSeq2SeqLM.from_pretrained(HUMANIZE_MODEL_NAME)
-
-    # Move to GPU if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    humanizeModel = humanizeModel.to(device)
-
-    print("✅ Humanizer model loaded successfully!")
+app = FastAPI(title="AI Text Detector API", version="2.0", lifespan=lifespan)
 
 
 app.add_middleware(

@@ -5,7 +5,6 @@ from routes.detect_routes import router as detect_router
 from routes.upload_routes import router as upload_router
 from routes.humanize_routes import router as humanize_router
 from fastapi.middleware.cors import CORSMiddleware
-import nltk
 from huggingface_hub import InferenceClient
 from dotenv import load_dotenv
 
@@ -27,12 +26,6 @@ HUMANIZER_MODEL = "google/flan-t5-base"
 async def lifespan(app: FastAPI):
     """Initialize HuggingFace Inference API clients on startup"""
     global detector_client, humanizer_client
-
-    # Ensure tokenizers are downloaded for sentence splitting
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download("punkt", quiet=True)
 
     # Get HuggingFace API token from environment
     hf_token = os.environ.get("HF_TOKEN")

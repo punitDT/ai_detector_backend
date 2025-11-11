@@ -1,7 +1,6 @@
 fastapi
 uvicorn
 huggingface_hub
-nltk
 python-multipart
 PyMuPDF
 python-docx
